@@ -11,8 +11,8 @@
 DHT11 dht11(2);
 
 // Credenziali da Secret Tab
-char ssid[] = SECRET_SSID;   
-char pass[] = SECRET_PASS;   
+char ssid[] = SECRET_SSID;
+char pass[] = SECRET_PASS;
 unsigned long myChannelNumber = SECRET_CH_ID;
 const char * myWriteAPIKey = SECRET_WRITE_API_KEY;
 
@@ -20,90 +20,45 @@ WiFiClient  client;
 
 void setup() {
   Serial.begin(9600);
-  while (!Serial); 
+  while (!Serial);
 
   // Inizializza ThingSpeak
-  ThingSpeak.begin(client); 
-  
+  ThingSpeak.begin(client);
+
   // Connessione WiFi
   connectWiFi();
 }
 
+
 void loop() {
+
   // Se il WiFi cade, riconnettiti
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
   }
 
-  // Esempio: Leggi un sensore su A0
-  //int sensorValue = random(20, 31); //analogRead(A0);
+  int t = 0;
+  int h = 0;
 
-  // -----------------------
+  // Chiamata alla funzione: se restituisce true, i dati sono pronti
+  if (leggiDatiDHT(t, h)) {
+    // Carichiamo i dati nei campi di ThingSpeak
+    ThingSpeak.setField(1, t);
+    ThingSpeak.setField(2, h);
 
-  bool erroreDht = false;
-
-  // Attempt to read the temperature value from the DHT11 sensor.
-  int temperature = dht11.readTemperature();
-
-  // Check the result of the reading.
-  // If there's no error, print the temperature value.
-  // If there's an error, print the appropriate error message.
-  if (temperature != DHT11::ERROR_CHECKSUM && temperature != DHT11::ERROR_TIMEOUT)
-  {
-    Serial.print("TEMP   | Temperatura: ");
-    Serial.print(temperature);
-    Serial.println(" °C");
-  }
-  else
-  {
-    Serial.print("E-DTH  | ");
-    Serial.println(DHT11::getErrorString(temperature));
-    erroreDht = true;
-  }
-
-  // Wait for 1 seconds before the next reading.
-  delay(1000);
-
-  // Attempt to read the humidity value from the DHT11 sensor.
-  int humidity = dht11.readHumidity();
-
-  // Check the result of the reading.
-  // If there's no error, print the humidity value.
-  // If there's an error, print the appropriate error message.
-  if (humidity != DHT11::ERROR_CHECKSUM && humidity != DHT11::ERROR_TIMEOUT)
-  {
-    Serial.print("UMID   | Umidità: ");
-    Serial.print(humidity);
-    Serial.println(" %");
-  }
-  else
-  {
-    Serial.print("E-DTH  | ");
-    Serial.println(DHT11::getErrorString(humidity));
-    erroreDht = true;
-  }
-  
-
-  // -----------------------
-  
-  if (!erroreDht)
-  {
-    // Imposta il valore per il Campo 1 (Field 1)
-    ThingSpeak.setField(3, temperature);
-  
-    // Scrivi sul canale
+    // Invio unico dei dati
     int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
-  
-    if(x == 200){
-      Serial.println("Canale aggiornato con successo!");
-    }
-    else{
-      Serial.println("Errore aggiornamento. Codice HTTP: " + String(x));
+
+    if (x == 200) {
+      Serial.println("Dati inviati a ThingSpeak!");
+    } else {
+      Serial.println("Errore ThingSpeak. Codice HTTP: " + String(x));
     }
   }
 
-  // ThingSpeak accetta aggiornamenti ogni 15 secondi (piano Free)
-  delay(15000); 
+  // Pausa di 15 secondi richiesta da ThingSpeak (piano gratuito)
+  delay(15000);
+
 }
 
 void connectWiFi() {
@@ -114,4 +69,39 @@ void connectWiFi() {
     delay(5000);
   }
   Serial.println("\nConnesso.");
+}
+
+// Funzione per leggere il sensore DHT11 con pausa di sincronizzazione
+bool leggiDatiDHT(int &temp, int &umid) {
+  // 1. Leggi la temperatura
+  temp = dht11.readTemperature();
+
+  // 2. Pausa necessaria per il sensore tra le due letture
+  delay(1000);
+
+  // 3. Leggi l'umidità
+  umid = dht11.readHumidity();
+
+  // Verifica se ci sono stati errori nella temperatura
+  if (temp == DHT11::ERROR_CHECKSUM || temp == DHT11::ERROR_TIMEOUT) {
+    Serial.print("E-DTH Temp | ");
+    Serial.println(DHT11::getErrorString(temp));
+    return false;
+  }
+
+  // Verifica se ci sono stati errori nell'umidità
+  if (umid == DHT11::ERROR_CHECKSUM || umid == DHT11::ERROR_TIMEOUT) {
+    Serial.print("E-DTH Umid | ");
+    Serial.println(DHT11::getErrorString(umid));
+    return false;
+  }
+
+  // Se tutto è andato bene, stampa i valori per debug
+  Serial.print("Lettura OK | Temp: ");
+  Serial.print(temp);
+  Serial.print("°C, Umid: ");
+  Serial.print(umid);
+  Serial.println("%");
+
+  return true;
 }
