@@ -3,9 +3,15 @@ import telebot
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
+from telebot import types
 
 # Carica le variabili dal file .env
 load_dotenv()
+
+# Sostituisci con i tuoi dati
+#TOKEN = ''
+#CHANNEL_ID = '3203205'
+#READ_API_KEY = ''
 
 
 TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -34,10 +40,34 @@ def get_ram_info():
 
 
 @bot.message_handler(commands=['start', 'aiuto'])
+@bot.message_handler(commands=['start', 'aiuto'])
 def send_welcome(message):
-    bot.reply_to(message, "🌿 Ciao! Usa il comando /dati per leggere l'ultimo aggiornamento dai sensori ambientali registrato su *ThingSpeak*.")
+    # Creazione della tastiera (resize_keyboard la rende più piccola e pulita)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
 
-@bot.message_handler(commands=['dati'])
+    # Definizione dei tasti
+    #btn_dati = types.KeyboardButton('📊 /dati')
+    #btn_cpu = types.KeyboardButton('🌡️ /cputemp')
+    #btn_ram = types.KeyboardButton('📟 /ram')
+
+    btn_dati = types.KeyboardButton('📊 Dati')
+    btn_cpu = types.KeyboardButton('🌡️ CPU Temp')
+    btn_ram = types.KeyboardButton('📟 RAM')
+
+    # Organizzazione dei tasti: /dati a tutta larghezza, gli altri due sotto affiancati
+    markup.add(btn_dati)
+    markup.row(btn_cpu, btn_ram)
+
+    bot.reply_to(
+        message, 
+        "🌿 *Benvenuto nel Bot GdS2026!*\nUsa i tasti qui sotto per monitorare i sensori ambientali e lo stato del Raspberry.",
+        reply_markup=markup,
+        parse_mode='Markdown'
+    )
+
+#@bot.message_handler(commands=['dati'])
+@bot.message_handler(commands=['dati'], func=lambda message: True)
+@bot.message_handler(func=lambda message: message.text == "📊 Dati")
 def get_data(message):
     # URL per leggere l'ultimo feed del canale
     url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json?api_key={READ_API_KEY}&results=1"
@@ -46,32 +76,40 @@ def get_data(message):
         response = requests.get(url).json()
         ultimo_feed = response['feeds'][0]
 
-        # Supponendo che il dato sia nel field1
-        # valore = ultimo_feed['field1']
-        # data_ora = ultimo_feed['created_at']
-
+        # Recupero dati esistenti
         temp = ultimo_feed.get('field1', 'N/D')
         umid = ultimo_feed.get('field2', 'N/D')
+
+        # Recupero nuovi dati sul particolato
+        pm1 = ultimo_feed.get('field3', 'N/D')
+        pm25 = ultimo_feed.get('field4', 'N/D')
+        pm10 = ultimo_feed.get('field5', 'N/D')
 
         # Formattazione data
         data_iso = ultimo_feed['created_at']
         data_obj = datetime.strptime(data_iso, '%Y-%m-%dT%H:%M:%SZ')
         orario = data_obj.strftime('%H:%M del %d/%m/%Y')
 
-        # Costruzione del messaggio
+        # Costruzione del messaggio con i nuovi campi
         risposta = "📊 *Rilevazione Sensori*\n"
         risposta += "----------------------------\n"
         risposta += f"🌡️ *Temperatura:* {temp} °C\n"
         risposta += f"💧 *Umidità:* {umid} %\n"
         risposta += "----------------------------\n"
+        risposta += "🌬️ *Qualità dell'Aria (Particolato):*\n"
+        risposta += f"🔹 *PM 1:* {pm1} µg/m³\n"
+        risposta += f"🔹 *PM 2.5:* {pm25} µg/m³\n"
+        risposta += f"🔹 *PM 10:* {pm10} µg/m³\n"
+        risposta += "----------------------------\n"
         risposta += f"🕒 _Dati aggiornati alle {orario}_"
 
-        # testo_risposta = f"📊 *Ultimo Dato:*\nValore: {valore}\nRicevuto il: {data_ora}"
         bot.reply_to(message, risposta, parse_mode='Markdown')
     except Exception as e:
-        bot.reply_to(message, "❌ Errore nel recupero dati. Verifica che il canale sia pubblico o che la chiave sia corretta.")
+        bot.reply_to(message, "❌ Errore nel recupero dati. Verifica la connessione o i permessi del canale.")
 
+#@bot.message_handler(commands=['cputemp'])
 @bot.message_handler(commands=['cputemp'])
+@bot.message_handler(func=lambda message: message.text == "🌡️ CPU Temp")
 def send_temp(message):
     try:
         cpu_temp = get_cpu_temp()
@@ -79,7 +117,9 @@ def send_temp(message):
     except Exception as e:
         bot.reply_to(message, "Errore nella lettura della temperatura.")
 
+#@bot.message_handler(commands=['ram']):
 @bot.message_handler(commands=['ram'])
+@bot.message_handler(func=lambda message: message.text == "📟 RAM")
 def send_ram(message):
     try:
         ram_status = get_ram_info()
