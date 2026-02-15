@@ -22,7 +22,7 @@ PMS::DATA data;
 unsigned long lastDHTMillis = 0;
 unsigned long lastPMSCycleMillis = 0;
 unsigned long pmsWarmupStartMillis = 0;
-const long intervalDHT = 60 * 1000;       //  60 secondi ogni lettura DHT
+const long intervalDHT = 60 * 1000;       // 60 secondi ogni lettura DHT
 const long intervalPMS = 10 * 60 * 1000;  // 15 minuti (15 * 60 * 1000) 900000
 const long warmupPMS = 30 * 1000;         // 30 secondi stabilizzazione
 bool dhtJustRead = false;
@@ -65,6 +65,7 @@ void setup() {
   // Inizializza PMS in Sleep Mode
   //pms.sleep();
   //Serial.println("PMS5003 in modalità sleep.");
+  pms.wakeUp();
 }
 
 void loop() {
@@ -78,13 +79,14 @@ void loop() {
       ThingSpeak.setField(2, hum);
       // Invio immediato (se il PMS non sta campionando)
       if (pmsState == SLEEPING) {
-        ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+        //ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
+        inviaDatiGlobali();
         Serial.print("Inviati a ThingSpeak temperatura ");
         Serial.print(temp);
         Serial.print(" umidità ");
         Serial.println(hum);
       } else {
-        Serial.print("Valori DHT11 in attesa di invio a Thingspeak, il PMS5003 è attivo. ");
+        Serial.println("Valori DHT11 in attesa di invio a Thingspeak, il PMS5003 è attivo. ");
       }
     }
     lastDHTMillis = currentMillis;
@@ -102,6 +104,7 @@ void loop() {
       break;
 
     case WARMING_UP:
+      displayLedPMStatus("W");
       if (currentMillis - pmsWarmupStartMillis >= warmupPMS) {
         Serial.println("PMS5003 Stabilizzato. Inizio campionamento...");
         pmsSampleCount = 0;
@@ -113,6 +116,7 @@ void loop() {
       break;
 
     case SAMPLING:
+      displayLedPMStatus(String(pmsSampleCount));
       if (pms.readUntil(data)) {
         sumPM1 += data.PM_AE_UG_1_0;
         sumPM25 += data.PM_AE_UG_2_5;
@@ -120,10 +124,10 @@ void loop() {
         pmsSampleCount++;
       }
 
-      if (pmsSampleCount >= 100) {
-        avgPM1 = sumPM1 / 100.0;
-        avgPM25 = sumPM25 / 100.0;
-        avgPM10 = sumPM10 / 100.0;
+      if (pmsSampleCount >= 50) {
+        avgPM1 = sumPM1 / 50.0;
+        avgPM25 = sumPM25 / 50.0;
+        avgPM10 = sumPM10 / 50.0;
 
         Serial.print("PM1: ");
         Serial.print(avgPM1);
@@ -139,15 +143,15 @@ void loop() {
         pms.sleep();
         pmsState = SLEEPING;
         lastPMSCycleMillis = currentMillis;
-        
-        statusCanale = "Prossimo campionamento PM fra " + String(intervalPMS) + " mSec";
-        ThingSpeak.setStatus(statusCanale);
+
+        // statusCanale = "Prossimo campionamento PM fra " + String(intervalPMS) + " mSec";
+        // ThingSpeak.setStatus(statusCanale);
         Serial.println("PMS5003 ritorna in modalità sleep " + statusCanale);
       }
       break;
   }
 
-  // 3. Aggiornamento Matrice LED (non bloccante)
+  // 3. Aggiornamento Matrice LED
   updateLedMatrix();
 }
 
@@ -225,11 +229,11 @@ void updateLedMatrix() {
   // matrix.println(msg);
   matrix.println(" * * *  " + getUtcDateTime() + " T: " + String(temp) + "C H:" + String(hum) + "%" + " PM10: " + String(avgPM10) + +" PM2.5: " + String(avgPM25));
 
-  // 3. SCROLL_LEFT è bloccante: il codice si fermerà qui finché
-  // la scritta non sarà passata tutta. Questo garantisce leggibilità.
+  // 3. SCROLL_LEFT è bloccante: il codice si fermerà qui
+
   matrix.endText(SCROLL_LEFT);
   matrix.endDraw();
-  // delay(5000);
+
   Serial.println("Led matrix aggiornata");
 }
 
@@ -254,4 +258,17 @@ void connectWiFi() {
     delay(1000);
   }
   Serial.println("Connessione wifi eseguita");
+}
+
+void displayLedPMStatus(String stato) {
+  matrix.beginDraw();
+  matrix.stroke(0xFFFFFFFF);
+  matrix.textFont(Font_4x6);  // Font compatto per far stare tutto nello spazio 12x8
+  matrix.beginText(0, 1, 0xFFFFFFFF, 0, 0);
+
+  // Ora usiamo il parametro 'stato' passato alla funzione
+  matrix.print("P" + stato);
+
+  matrix.endText(NO_SCROLL);  // Non deve bloccare il loop
+  matrix.endDraw();
 }
